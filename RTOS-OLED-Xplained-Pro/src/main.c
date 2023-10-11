@@ -97,7 +97,7 @@ static void task_coins(void *pvParameters){
 		
 		if ((xSemaphoreTake(xBtnSemaphore, 1000))& (primeira_vez)) { //Clicou o botao pela primeira vez
 			int ticks = rtt_read_timer_value(RTT);
-			time = ticks/1000;
+			time = ticks;
 			srand(time);
 			
 			printf(" \ntime: %d \n", time);
