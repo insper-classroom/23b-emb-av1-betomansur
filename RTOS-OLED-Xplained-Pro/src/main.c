@@ -19,6 +19,15 @@
 #define BTN_PIO_PIN 11
 #define BTN_PIO_PIN_MASK (1 << BTN_PIO_PIN)
 
+#define PINO_BUZ_PIO PIOC
+#define PINO_BUZ_PIO_ID ID_PIOC
+#define PINO_BUZ_PIO_IDX 19
+#define PINO_BUZ_PIO_IDX_MASK (1 << PINO_BUZ_PIO_IDX)
+
+#define NOTE_E6  1319
+#define NOTE_B5  988
+
+
 
 
 /************************************************************************/
@@ -27,6 +36,7 @@
 
 void btn_init(void);
 void RTT_init(float freqPrescale, uint32_t IrqNPulses, uint32_t rttIRQSource);
+int tone(int freq, int duracao);
 
 /************************************************************************/
 /* rtos vars                                                            */
@@ -82,22 +92,21 @@ static void task_coins(void *pvParameters){
 	int time;
 	int coins;
 	
-	
-	
-	
 	for(;;){
+
 		
 		if ((xSemaphoreTake(xBtnSemaphore, 1000))& (primeira_vez)) { //Clicou o botao pela primeira vez
 			int ticks = rtt_read_timer_value(RTT);
 			time = ticks/1000;
+			srand(time);
 			
-			printf("time: %d \n", time);
+			printf(" \ntime: %d \n", time);
 			primeira_vez = 0;
 			coins = (rand() % 3) + 1;
 			xQueueSend(xQueueCoins, &coins, 0);
 			
 			
-		
+			
 		}
 		if ((xSemaphoreTake(xBtnSemaphore, 1000))& (!primeira_vez)) { //Clicou o botao pela segunda vez ou mais
 			coins = (rand() % 3) + 1;
@@ -113,13 +122,38 @@ static void task_coins(void *pvParameters){
 }
 
 static void task_play(void *pvParameters){
+	btn_init();
 	int coins;
+	
 	
 	for(;;){
 		
 		if (xQueueReceive(xQueueCoins, &(coins), 1000)) {
-			printf("%d \n",coins);
-		
+			printf("Coins: %d \n",coins);
+			
+			if (coins == 1){
+				tone(NOTE_B5,  80);
+				tone(NOTE_E6, 640);
+
+			}
+			if (coins == 2){
+				tone(NOTE_B5,  80);
+				tone(NOTE_E6, 640);
+				tone(NOTE_B5,  80);
+				tone(NOTE_E6, 640);
+
+			}
+			if (coins == 3){
+				tone(NOTE_B5,  80);
+				tone(NOTE_E6, 640);
+				tone(NOTE_B5,  80);
+				tone(NOTE_E6, 640);
+				tone(NOTE_B5,  80);
+				tone(NOTE_E6, 640);
+
+			}
+			
+			
 		}
 		
 	}
@@ -143,7 +177,38 @@ static void task_debug(void *pvParameters) {
 /* funcoes                                                              */
 /************************************************************************/
 
+int tone(int freq, int duracao){
+	// Recebendo uma frequencia em hz (rotações/ segundo)
+	// Recebendo um tempo de toque
+	// f = 1/T
+	int T = 0;
+	int N = 0;
+	
+	if (freq == 0){
+		T = 0;
+		N = 0;
+	}
+	else{
+		
+		T = 1000000/freq;
+		
+		N = freq*duracao/1000;
+	}
+
+	
+	for (int i = 0;i<N;i++){
+		pio_set(PINO_BUZ_PIO,PINO_BUZ_PIO_IDX_MASK);
+		delay_us(T/2);
+		pio_clear(PINO_BUZ_PIO,PINO_BUZ_PIO_IDX_MASK);
+		delay_us(T/2);
+		
+	}
+}
+
 void btn_init(void) {
+	
+	pmc_enable_periph_clk(PINO_BUZ_PIO_ID);
+	pio_set_output(PINO_BUZ_PIO, PINO_BUZ_PIO_IDX_MASK, 0, 0, 0);
 	// Inicializa clock do periférico PIO responsavel pelo botao
 	pmc_enable_periph_clk(BTN_PIO_ID);
 
@@ -223,7 +288,7 @@ int main(void) {
 	sysclk_init();
 	board_init();
 	
-	printf("Comecando codigo...\n");
+	printf("Comecando codigo...");
 
 	/* Initialize the console uart */
 	configure_console();
@@ -248,7 +313,7 @@ int main(void) {
 	}
 	
 	if (xTaskCreate(task_play, "play", TASK_OLED_STACK_SIZE, NULL,
-	TASK_OLED_STACK_PRIORITY, NULL) != pdPASS) {
+	(TASK_OLED_STACK_PRIORITY+1), NULL) != pdPASS) {
 		printf("Failed to create play task\r\n");
 	}
 	
