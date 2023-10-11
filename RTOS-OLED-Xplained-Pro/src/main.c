@@ -32,6 +32,10 @@ void RTT_init(float freqPrescale, uint32_t IrqNPulses, uint32_t rttIRQSource);
 /* rtos vars                                                            */
 /************************************************************************/
 
+QueueHandle_t xQueueCoins;
+SemaphoreHandle_t xBtnSemaphore;
+
+volatile int primeira_vez = 1;
 
 /************************************************************************/
 /* RTOS application funcs                                               */
@@ -63,7 +67,8 @@ extern void vApplicationMallocFailedHook(void) {
 /************************************************************************/
 
 void but_callback(void) {
-
+	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+	xSemaphoreGiveFromISR(xBtnSemaphore, &xHigherPriorityTaskWoken);
 }
 
 
@@ -71,6 +76,54 @@ void but_callback(void) {
 /* TASKS                                                                */
 /************************************************************************/
 
+static void task_coins(void *pvParameters){
+	btn_init();
+	RTT_init(1000,0,0);
+	int time;
+	int coins;
+	
+	
+	
+	
+	for(;;){
+		
+		if ((xSemaphoreTake(xBtnSemaphore, 1000))& (primeira_vez)) { //Clicou o botao pela primeira vez
+			int ticks = rtt_read_timer_value(RTT);
+			time = ticks/1000;
+			
+			printf("time: %d \n", time);
+			primeira_vez = 0;
+			coins = (rand() % 3) + 1;
+			xQueueSend(xQueueCoins, &coins, 0);
+			
+			
+		
+		}
+		if ((xSemaphoreTake(xBtnSemaphore, 1000))& (!primeira_vez)) { //Clicou o botao pela segunda vez ou mais
+			coins = (rand() % 3) + 1;
+			xQueueSend(xQueueCoins, &coins, 0);
+			
+		}
+
+		
+		
+		
+		
+	}
+}
+
+static void task_play(void *pvParameters){
+	int coins;
+	
+	for(;;){
+		
+		if (xQueueReceive(xQueueCoins, &(coins), 1000)) {
+			printf("%d \n",coins);
+		
+		}
+		
+	}
+}
 
 static void task_debug(void *pvParameters) {
 	gfx_mono_ssd1306_init();
@@ -169,9 +222,35 @@ int main(void) {
 	/* Initialize the SAM system */
 	sysclk_init();
 	board_init();
+	
+	printf("Comecando codigo...\n");
 
 	/* Initialize the console uart */
 	configure_console();
+	
+	//Semaforos
+	
+	xBtnSemaphore = xSemaphoreCreateBinary();
+	if (xBtnSemaphore == NULL)
+	printf("falha em criar o semaforo \n");
+	
+	// Queues
+	
+	xQueueCoins = xQueueCreate(100, sizeof(int));
+	if (xQueueCoins == NULL)
+	printf("falha em criar a queue xQueueCoins \n");
+
+	//Tasks
+	
+	if (xTaskCreate(task_coins, "coins", TASK_OLED_STACK_SIZE, NULL,
+	TASK_OLED_STACK_PRIORITY, NULL) != pdPASS) {
+		printf("Failed to create coins task\r\n");
+	}
+	
+	if (xTaskCreate(task_play, "play", TASK_OLED_STACK_SIZE, NULL,
+	TASK_OLED_STACK_PRIORITY, NULL) != pdPASS) {
+		printf("Failed to create play task\r\n");
+	}
 	
 	if (xTaskCreate(task_debug, "debug", TASK_OLED_STACK_SIZE, NULL,
 	TASK_OLED_STACK_PRIORITY, NULL) != pdPASS) {
